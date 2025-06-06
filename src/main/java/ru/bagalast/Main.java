@@ -1,7 +1,5 @@
 package ru.bagalast;
 
-
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -30,15 +28,17 @@ public class Main {
 
         Map<String, List<Transaction>> transactions = new HashMap<>();
         Map<String, Double> balances = new HashMap<>();
+        Map<String, LocalDateTime> lastInquiry = new HashMap<>();
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "*.log")){
             for (Path file : stream){
-                readLogFile(file,transactions,balances);
+                readLogFile(file,transactions,balances,lastInquiry);
             }
         }
         writeLogFile(outDir,transactions,balances);
     }
-    private static void readLogFile(Path file, Map<String,List<Transaction>> transactions, Map<String,Double> balances) throws IOException {
+
+    private static void readLogFile(Path file, Map<String,List<Transaction>> transactions, Map<String,Double> balances, Map<String,LocalDateTime> lastInquiry) throws IOException {
         List<String> lines = Files.readAllLines(file);
         for (String line : lines){
             Matcher matcher = LOG_PATTERN.matcher(line);
@@ -57,33 +57,32 @@ public class Main {
             }
             transactions.get(user).add(transaction);
 
-            if (!balances.containsKey(user)){
-                balances.put(user,0.0);
-            }
             if (operation.equalsIgnoreCase("balance inquiry")) {
-                if (!balances.containsKey(user) || balances.get(user) == 0.0) {
-                    balances.put(user, amount);
-                }
+                balances.put(user, amount);
+                lastInquiry.put(user, time);
             }
-            if (operation.equalsIgnoreCase("transferred")){
-                balances.put(user,balances.get(user) - amount);
-                if (!balances.containsKey(otherUser)){
-                    balances.put(otherUser,0.0);
+            else if (operation.equalsIgnoreCase("transferred")){
+                if (!lastInquiry.containsKey(user) || time.isAfter(lastInquiry.get(user))) {
+                    balances.put(user, balances.getOrDefault(user, 0.0) - amount);
                 }
-                balances.put(otherUser,balances.get(otherUser) + amount);
-                Transaction transaction_otherUser = new Transaction(time,otherUser,"received",amount,user);
-                if (!transactions.containsKey(otherUser)){
-                    transactions.put(otherUser, new ArrayList<>());
+                if (otherUser != null) {
+                    if (!lastInquiry.containsKey(otherUser) || time.isAfter(lastInquiry.get(otherUser))) {
+                        balances.put(otherUser, balances.getOrDefault(otherUser, 0.0) + amount);
+                    }
+                    Transaction transaction_otherUser = new Transaction(time,otherUser,"received",amount,user);
+                    if (!transactions.containsKey(otherUser)){
+                        transactions.put(otherUser, new ArrayList<>());
+                    }
+                    transactions.get(otherUser).add(transaction_otherUser);
                 }
-                transactions.get(otherUser).add(transaction_otherUser);
-
             } else if (operation.equalsIgnoreCase("withdrew")) {
-                balances.put(user, balances.get(user) - amount);
-
+                if (!lastInquiry.containsKey(user) || time.isAfter(lastInquiry.get(user))) {
+                    balances.put(user, balances.getOrDefault(user, 0.0) - amount);
+                }
             }
         }
-
     }
+
     private static void writeLogFile(Path outDir, Map<String,List<Transaction>> transactions, Map<String, Double> balances) throws IOException {
         for (String user : transactions.keySet()){
             List<Transaction> trs = transactions.get(user);
@@ -92,12 +91,25 @@ public class Main {
             for (Transaction transaction : trs){
                 lines.add(transaction.toString());
             }
-            double balance = balances.getOrDefault(user,0.0);
-            String stringBalance = String.format("[%s] %s final balance %.2f",LocalDateTime.now().format(DATE_FORMATTER),user,balance);
-            lines.add(stringBalance);
-
+            if (!trs.isEmpty() && trs.get(trs.size() - 1).getOperation().equalsIgnoreCase("balance inquiry")) {
+                double lastBalance = trs.get(trs.size() - 1).getAmount();
+                String stringBalance = String.format("[%s] %s final balance %.2f",
+                        LocalDateTime.now().format(DATE_FORMATTER),
+                        user,
+                        lastBalance
+                );
+                lines.add(stringBalance);
+            } else {
+                double balance = balances.getOrDefault(user, 0.0);
+                String stringBalance = String.format("[%s] %s final balance %.2f",
+                        LocalDateTime.now().format(DATE_FORMATTER),
+                        user,
+                        balance
+                );
+                lines.add(stringBalance);
+            }
             Path userFile = outDir.resolve(user + ".log");
-            Files.write(userFile,lines);
+            Files.write(userFile, lines);
         }
     }
 }
