@@ -19,7 +19,7 @@ public class Main {
             "^\\[(.+?)\\] (\\w+) (balance inquiry|transferred|withdrew)\\s+(\\d+[\\.,]?\\d*)(?:\\s+to\\s+(\\w+))?$",
             Pattern.CASE_INSENSITIVE
     );
-    
+
     public static void main(String[] args) throws IOException {
         if (args.length != 1){
             return;
@@ -60,12 +60,17 @@ public class Main {
             if (!balances.containsKey(user)){
                 balances.put(user,0.0);
             }
+            if (operation.equalsIgnoreCase("balance inquiry")) {
+                if (!balances.containsKey(user) || balances.get(user) == 0.0) {
+                    balances.put(user, amount);
+                }
+            }
             if (operation.equalsIgnoreCase("transferred")){
                 balances.put(user,balances.get(user) - amount);
                 if (!balances.containsKey(otherUser)){
                     balances.put(otherUser,0.0);
                 }
-                balances.put(otherUser,balances.get(otherUser) +amount);
+                balances.put(otherUser,balances.get(otherUser) + amount);
                 Transaction transaction_otherUser = new Transaction(time,otherUser,"received",amount,user);
                 if (!transactions.containsKey(otherUser)){
                     transactions.put(otherUser, new ArrayList<>());
