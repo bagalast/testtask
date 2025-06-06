@@ -12,6 +12,7 @@ java -jar "E:\Advent Production\LogTransaction\build\libs\LogTransaction-1.0-SNA
 
 ## Примечание
 При входных данных:
+
 log1.log
 ```
 [2025-05-10 09:00:22] user001 balance inquiry 1000.00
